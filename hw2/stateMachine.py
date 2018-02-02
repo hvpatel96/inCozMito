@@ -24,6 +24,16 @@ def transition(next):
     currentState = Idle
     return Idle
 
+def stateDecider(input):
+    return {
+        'drone' : Drone
+        'order' : Order
+        'inspection' : Inspection
+        'none' : Idle
+    }[input]
+def transition(input):
+    currentState = stateDecider(input)
+    currentState = Idle
 
 import numpy as np
 import re
