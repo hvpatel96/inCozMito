@@ -20,6 +20,13 @@ class Order(State):
     action =
 class Inspection(State):
     action =
-def transition(next):
+def stateDecider(input):
+    return {
+        'drone' : Drone
+        'order' : Order
+        'inspection' : Inspection
+        'none' : Idle
+    }[input]
+def transition(input):
+    currentState = stateDecider(input)
     currentState = Idle
-    return Idle
