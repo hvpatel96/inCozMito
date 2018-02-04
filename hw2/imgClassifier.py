@@ -116,9 +116,10 @@ def run(sdk_conn):
         new_image.save("./test/" + str(imgType) + "_" + timestamp + ".bmp")
 
         print("Predicting: ", end="")
+        imgArr = [np.asarray(new_image)]
         # Asking for label of new image
-        (test_raw, test_labels) = imageClf.load_data_from_folder('./test/')
-        test_data = imageClf.extract_image_features(test_raw)
+        # (test_raw, test_labels) = imageClf.load_data_from_folder('./test/')
+        test_data = imageClf.extract_image_features(imgArr)
         predicted_labels = imageClf.predict_labels(test_data)
 
         for label in predicted_labels:
@@ -130,7 +131,7 @@ def run(sdk_conn):
                     robot.turn_in_place(degrees(90)).wait_for_completed()
 
         # Cleans up test directory
-        os.system("del test\*.bmp")
+        # os.system("del test\*.bmp")
 
 if __name__ == '__main__':
     cozmo.setup_basic_logging()
