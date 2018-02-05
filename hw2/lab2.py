@@ -125,12 +125,16 @@ class Idle(State):
         test_data = imageClf.extract_image_features(imgArr)
         predicted_label = imageClf.predict_labels(test_data)[0]
         if predicted_label == "drone":
+            print("drone")
             stateMachine.state = Drone()
         elif predicted_label == "order":
+            print("order")
             stateMachine.state = Order()
         elif predicted_label == "inspection":
+            print("inspection")
             stateMachine.state = Inspection()
         else:
+            print("idle")
             stateMachine.state = Idle()
 
 class Order(State):
@@ -189,13 +193,6 @@ class Drone(State):
         robot.drive_straight(distance_mm(-100), speed_mmps(10)).wait_for_completed()
 
         stateMachine.state = Idle()
-
-
-import marker_detection
-
-def convert_Image(image):
-    pass
-
 
 def begin(sdk_conn):
     global ROBOT_INSTANCE
