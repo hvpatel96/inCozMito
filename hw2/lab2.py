@@ -169,6 +169,7 @@ def begin(sdk_conn):
     global ROBOT_INSTANCE
     ROBOT_INSTANCE = sdk_conn.wait_for_robot()
     sm = StateMachine()
+    sm.start()
 
 if __name__ == '__main__':
     cozmo.setup_basic_logging()
