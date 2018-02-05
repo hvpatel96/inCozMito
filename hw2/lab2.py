@@ -140,7 +140,7 @@ class Order(State):
 
         robot.say_text("Running Order").wait_for_completed()
 
-        robot.drive_wheels(20, 80, 10).wait_for_completed()
+        robot.drive_wheels(20, 80, duration=10).wait_for_completed()
         stateMachine.state = Idle()
 
 class Inspection(State):
@@ -149,7 +149,7 @@ class Inspection(State):
         robot = ROBOT_INSTANCE
 
         robot.say_text("Running Inspection").wait_for_completed()
-
+        # Add moving lift up and down functionality
         for _ in range(4):
             robot.drive_straight(distance_mm(200), speed_mmps(50)).wait_for_completed()
             robot.turn_in_place(degrees(90)).wait_for_completed()
@@ -161,6 +161,20 @@ class Drone(State):
         robot = ROBOT_INSTANCE
 
         robot.say_text("Running Drone").wait_for_completed()
+        # Add functionality to move and pick up block
+        lookaround = robot.start_behavior(cozmo.behavior.BehaviorTypes.LookAroundInPlace)
+        cubes = robot.world.wait_until_observe_num_objects(num=1, object_type=cozmo.objects.LightCube, timeout=60)
+        lookaround.stop()
+
+        current_action = robot.pickup_object(cubes[0], num_retries=3)
+        current_action.wait_for_completed()
+
+        robot.drive_straight(distance_mm(100), speed_mmps(10)).wait_for_completed()
+
+        current_action = robot.place_object_on_ground_here(cubes[0])
+        current_action.wait_for_completed()
+
+        robot.drive_straight(distance_mm(-100), speed_mmps(10)).wait_for_completed()
 
         stateMachine.state = Idle()
 
