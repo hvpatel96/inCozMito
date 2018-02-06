@@ -125,12 +125,16 @@ class Idle(State):
         test_data = imageClf.extract_image_features(imgArr)
         predicted_label = imageClf.predict_labels(test_data)[0]
         if predicted_label == "drone":
+            print("drone")
             stateMachine.state = Drone()
         elif predicted_label == "order":
+            print("order")
             stateMachine.state = Order()
         elif predicted_label == "inspection":
+            print("inspection")
             stateMachine.state = Inspection()
         else:
+            print("idle")
             stateMachine.state = Idle()
 
 class Order(State):
@@ -138,9 +142,10 @@ class Order(State):
         global ROBOT_INSTANCE
         robot = ROBOT_INSTANCE
 
+        # Adjust duration
         robot.say_text("Running Order").wait_for_completed()
 
-        robot.drive_wheels(20, 80, duration=10).wait_for_completed()
+        robot.drive_wheels(20, 80, duration=10)
         stateMachine.state = Idle()
 
 class Inspection(State):
@@ -150,9 +155,20 @@ class Inspection(State):
 
         robot.say_text("Running Inspection").wait_for_completed()
         # Add moving lift up and down functionality
+
+        robot.set_lift_height(0.0).wait_for_completed()
         for _ in range(4):
-            robot.drive_straight(distance_mm(200), speed_mmps(50)).wait_for_completed()
+            robot.drive_wheels(50, 50)
+            robot.move_lift(0.5)
+            time.sleep(2)
+
+            robot.drive_wheels(50, 50)
+            robot.move_lift(-0.5)
+            time.sleep(2)
+
+            robot.drive_wheels(0,0)
             robot.turn_in_place(degrees(90)).wait_for_completed()
+
         stateMachine.state = Idle()
 
 class Drone(State):
@@ -177,7 +193,6 @@ class Drone(State):
         robot.drive_straight(distance_mm(-100), speed_mmps(10)).wait_for_completed()
 
         stateMachine.state = Idle()
-
 
 def begin(sdk_conn):
     global ROBOT_INSTANCE
