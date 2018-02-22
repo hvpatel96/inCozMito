@@ -1,3 +1,7 @@
+# Cozmo Group 1 - InCozMito
+# Jackson Cook
+# Harsh Patel
+
 from grid import *
 from particle import Particle
 from utils import *
@@ -18,17 +22,18 @@ def motion_update(particles, odom):
         Returns: the list of particles represents belief \tilde{p}(x_{t} | u_{t})
                 after motion update
     """
+    # No new movement update, so particles remain stationary
     if (odom[0] is 0) and (odom[1] is 0) and (odom[2] is 0):
         return particles
     motion_particles = []
     for particle in particles:
+        # Transform reference frame of robot to that of the particle
         rotated_x, rotated_y = rotate_point(odom[0], odom[1], particle.h)
+        # Update the coordinates and heading of each particle
         new_local_odom = (particle.x + rotated_x, particle.y + rotated_y, particle.h + odom[2])
+        # Add Motion Gaussian noise
         new_pos = add_odometry_noise(new_local_odom, ODOM_HEAD_SIGMA, ODOM_TRANS_SIGMA)
         motion_particles.append(Particle(new_pos[0], new_pos[1], new_pos[2]))
-        # noisy_odom = add_odometry_noise(odom, ODOM_HEAD_SIGMA, ODOM_TRANS_SIGMA)
-        # new_particle = Particle(x.x + noisy_odom[0],x.y + noisy_odom[1],x.h + noisy_odom[2])
-        # motion_particles.append(new_particle)
     return motion_particles
 
 # ------------------------------------------------------------------------
@@ -56,44 +61,145 @@ def measurement_update(particles, measured_marker_list, grid):
         Returns: the list of particles represents belief p(x_{t} | u_{t})
                 after measurement update
     """
-    noisy_true_markers = [add_marker_measurement_noise(x, MARKER_TRANS_SIGMA, MARKER_ROT_SIGMA) for x in measured_marker_list]
+    particleWeightArray = []
 
-    particle_dict = dict()
-    for particle in particles:
-        prob = 1
-        particle_markers = particle.read_markers(grid)
-        noisy_particle_markers = [add_marker_measurement_noise(x, MARKER_TRANS_SIGMA, MARKER_ROT_SIGMA) for x in particle_markers]
+    # Equalize weights if no new sensor data is retrieved
+    if len(measured_marker_list) == 0:
+        for particle in particles:
+            particleWeightArray.append((particle, 1 / len(particles)))
+    else:
+        for particle in particles:
+            # Quality assurance checks:
+            # Particle out of bounds should have zero weight
+            if not grid.is_in(particle.x, particle.y):
+                particleWeightArray.append((particle, 0))
+                continue
+            # Particle inside walls or obstacles should have zero weight
+            if not grid.is_free(particle.x, particle.y):
+                particleWeightArray.append((particle, 0))
+                continue
+            # Extract the markers the particle can see
+            particleMarkers = particle.read_markers(grid)
+            # Extract the particle-robot marker pairings
+            matchedMarkers, markerNumDifference = matchMarkers(measured_marker_list, particleMarkers)
 
+            # Define constants and starting values for weight update
+            probability = 1
+            constant_distanceSigma = 2 * (MARKER_TRANS_SIGMA ** 2)
+            constant_angleSigma = 2 * (MARKER_ROT_SIGMA ** 2)
 
-    # Assign weight of 1 to all particles
-    # particle_dict = dict()
-    # for particle in particles:
-    #     if grid.is_in(particle.x, particle.y):
-    #         particle_dict[particle] = 1
-    #     else:
-    #         particle_dict[particle] = 0
+            # Define starting values for max particle deviations
+            max_DistanceDeviation = 0
+            max_AngleDeviation = (ROBOT_CAMERA_FOV_DEG ** 2) / constant_angleSigma
+            # Update probability based on matched markers
+            for particle_marker, robot_marker in matchedMarkers:
+                # Find the distance between the two markers
+                distanceBetweenMatchedMarkers = grid_distance(particle_marker[0], particle_marker[1], robot_marker[0], robot_marker[1])
+                # Find the angle between the two markers
+                angleBetweenMatchedMarkers = diff_heading_deg(particle_marker[2], robot_marker[2])
+                # Apply Gaussian formula from the slides
+                particleDistTerm = (distanceBetweenMatchedMarkers ** 2) / constant_distanceSigma
+                particleAngleTerm = (angleBetweenMatchedMarkers ** 2) / constant_angleSigma
+                # Keep track of the max distance between markers seen thus far
+                max_DistanceDeviation = max(max_DistanceDeviation, particleDistTerm)
+                probability *= np.exp(-(particleDistTerm + particleAngleTerm))
 
-    # measured_particles = []
-    # alpha = 0
-    # for particle in particle_dict.keys():
-    #     alpha += particle_dict[particle]
-    # for particle in particle_dict.keys():
-    #     particle_dict[particle] = particle_dict[particle] / alpha
+            # Need some way to punish particles who saw too few or too many markers
+            # compared to the robot. Reducing the probability to zero would be too harsh,
+            # so reducing the probablity by the furthest possible "imaginary" marker able
+            # to be seen by that particle
+            for num in range(markerNumDifference):
+                probability *= np.exp(-(max_DistanceDeviation + max_AngleDeviation))
 
-    # for particle in particles:
-    #     if grid.is_in(particle.x, particle.y):
-    #         new_particle = np.random.choice(list(particle_dict.keys()), replace = True, p = list(particle_dict.values()))
-    #         measured_particles.append(new_particle)
-    #     else:
-    #         measured_particles += Particle.create_random(1, grid)
-    #
-    #
+            particleWeightArray.append((particle, probability))
+
+    particleWeightArray, totalParticlesRemoved = pruneAndCleanBottom(particleWeightArray, 0.01)
+    totalWeightSum = getTotalWeight(particleWeightArray)
+    # Normalize Particles Based on Total Weight
+    normalizedParticleArray, normalizedWeightArray = normalizeParticles(particleWeightArray, totalWeightSum)
+    # Resamples Particles Based on Weight
+    resampledParticles = resampleParticles(normalizedParticleArray, normalizedWeightArray)
+    # Create new random particles equal to the total number pruned
+    randomParticles = Particle.create_random(totalParticlesRemoved, grid)[:]
+    # Create output particle list
     measured_particles = []
-    for particle in particles:
-        if grid.is_in(particle.x, particle.y):
-            measured_particles.append(particle)
-        else:
-            measured_particles += Particle.create_random(1, grid)
+    # Add noise to resampled particles
+    noisyParticles = []
+    for particle in resampledParticles:
+        noisyParticleTraits = add_odometry_noise((particle.x, particle.y, particle.h), ODOM_HEAD_SIGMA, ODOM_TRANS_SIGMA)
+        noisyParticle = Particle(noisyParticleTraits[0], noisyParticleTraits[1], noisyParticleTraits[2])
+        noisyParticles.append(noisyParticle)
+    # Combine noisy, resampled particles and random particles
+    measured_particles = noisyParticles + randomParticles
     return measured_particles
 
+def matchMarkers(robotMarkers, particleMarkers):
+    matchedMarkers = []
+    # Number of seen markers different between robot and particle
+    markerNumDifference = int(math.fabs(len(robotMarkers) - len(particleMarkers)))
 
+    for robot_marker in robotMarkers:
+        # Quality Assurance Check
+        # No markers should match if particle sees nothing
+        if len(particleMarkers) == 0:
+            break
+        # Add noise to robot's measurements
+        noisyMarkerX, noisyMarkerY, noisyMarkerH = add_marker_measurement_noise(robot_marker, MARKER_TRANS_SIGMA, MARKER_ROT_SIGMA)
+
+        # Simple greedy algorithm to find closest particle_marker to robot_marker
+        min_particle_marker = particleMarkers[0]
+        min_marker_distance = grid_distance(noisyMarkerX, noisyMarkerY, min_particle_marker[0], min_particle_marker[1])
+        # Loop through and find closest particle_marker
+        for particle_marker in particleMarkers:
+            noisyParticleX, noisyParticleY, noisyParticleH = add_marker_measurement_noise(particle_marker, MARKER_TRANS_SIGMA, MARKER_ROT_SIGMA)
+            marker_distance = grid_distance(noisyMarkerX, noisyMarkerY, noisyParticleX, noisyParticleY)
+            if marker_distance < min_marker_distance:
+                min_particle_marker = particle_marker
+                min_marker_distance = marker_distance
+
+        # Append the closest marker found to the matchedMarkers list
+        matchedMarkers.append((min_particle_marker, robot_marker))
+        # Remove the min_particle_marker so that it can't be matched again
+        particleMarkers.remove(min_particle_marker)
+    # Return the matched markers and the number of markers different between particle and robot
+    return matchedMarkers, markerNumDifference
+
+def getTotalWeight(particlesWithWeights):
+    totalWeightSum = 0
+    for particle, weight in particlesWithWeights:
+        totalWeightSum += weight
+    return totalWeightSum
+
+def pruneAndCleanBottom(particlesWithWeights, pruning_percentage = 0.01):
+    amountToPrune = int(PARTICLE_COUNT * pruning_percentage)
+    # Sort the particles by weight
+    particlesWithWeights.sort(key = lambda x: x[1])
+    # Prune off bottom "pruning_percentage"
+    particlesWithWeights = particlesWithWeights[amountToPrune:]
+    # Prune remaining particles with weights of zero
+    zeroWeightNum = 0
+    for particle, weight in particlesWithWeights:
+        if weight == 0:
+            zeroWeightNum += 1
+    particlesWithWeights = particlesWithWeights[zeroWeightNum:]
+    # Report back pruned particles and total number of particles removed
+    return (particlesWithWeights, amountToPrune + zeroWeightNum)
+
+def normalizeParticles(particlesWithWeights, totalWeightSum):
+    # Create new particles and "assign" them normalized weights
+    newParticleList = []
+    normalizedWeightList = []
+    for particle, weight in particlesWithWeights:
+        newParticle = Particle(particle.x, particle.y, particle.h)
+        # Weight normalization step
+        normalizedWeightList.append(weight / totalWeightSum)
+        newParticleList.append(newParticle)
+    return (newParticleList, normalizedWeightList)
+
+def resampleParticles(particles, weights):
+    # Resample old particles based on their weight
+    resampledParticles = []
+    if len(particles) != 0:
+        # Resampling step
+        resampledParticles = np.random.choice(particles, size = len(particles), replace = True, p = weights)
+    return resampledParticles
