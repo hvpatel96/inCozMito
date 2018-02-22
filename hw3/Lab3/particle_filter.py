@@ -90,7 +90,7 @@ def measurement_update(particles, measured_marker_list, grid):
 
             # Define starting values for max particle deviations
             max_DistanceDeviation = 0
-            max_AngleDeviation = (ROBOT_CAMERA_FOV_DEG ** 2) / constant_angleSigma
+            max_AngleDeviation = (45 ** 2) / constant_angleSigma
             # Update probability based on matched markers
             for particle_marker, robot_marker in matchedMarkers:
                 # Find the distance between the two markers
@@ -107,9 +107,9 @@ def measurement_update(particles, measured_marker_list, grid):
             # Need some way to punish particles who saw too few or too many markers
             # compared to the robot. Reducing the probability to zero would be too harsh,
             # so reducing the probablity by the furthest possible "imaginary" marker able
-            # to be seen by that particle
+            # to be seen by that particle averaged with the spurious detection rate
             for num in range(markerNumDifference):
-                probability *= np.exp(-(max_DistanceDeviation + max_AngleDeviation))
+                probability *= ((SPURIOUS_DETECTION_RATE ** 2) + np.exp(-(max_DistanceDeviation + max_AngleDeviation))) / 2
 
             particleWeightArray.append((particle, probability))
 
@@ -120,7 +120,7 @@ def measurement_update(particles, measured_marker_list, grid):
     # Resamples Particles Based on Weight
     resampledParticles = resampleParticles(normalizedParticleArray, normalizedWeightArray)
     # Create new random particles equal to the total number pruned
-    randomParticles = Particle.create_random(totalParticlesRemoved, grid)[:]
+    randomParticles = Particle.create_random(totalParticlesRemoved, grid)
     # Create output particle list
     measured_particles = []
     # Add noise to resampled particles
