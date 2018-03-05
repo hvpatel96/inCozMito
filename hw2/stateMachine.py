@@ -10,16 +10,29 @@ import cozmo
 
 currentState = Idle
 
+class StateMachine:
+    def initialize(self, initialState):
+        self.currentState = inititialState
+        self.currentState.run()
+
 class State(object):
-    action = ""
+    def run(self):
+        assert 0
+    def next(self, input):
+        assert 0
+
 class Idle(State):
-    action =
+    def run(self):
+
 class Drone(State):
-    action =
+    def run(self):
+
 class Order(State):
-    action =
+    def run(self):
+
 class Inspection(State):
-    action =
+    def run(self):
+
 def transition(next):
     currentState = Idle
     return Idle
