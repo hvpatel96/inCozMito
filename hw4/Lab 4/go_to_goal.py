@@ -148,7 +148,28 @@ async def run(robot: cozmo.robot.Robot):
     ], dtype=np.float)
 
     while True:
-
+        if not converge(pf.particles):
+            if robot.is_picked_up:
+                print("Being picked up")
+                await robot.play_anim_trigger(cozmo.anim.Triggers.KnockOverFailure, in_parallel=True).wait_for_completed()
+                pf = ParticleFilter(grid)
+                time.sleep(4)
+            else:
+                curr_pose = robot.pose
+                odom = compute_odometry(curr_pose)
+                markers = await classification(robot)
+                # Determine pose of marker
+                measurement =
+                estimate = pf.update(odom, measurement)
+                gui.show_particles(pf.particles)
+                gui.show_mean(estimate[0], estimate[1], estimate[2], estimate[3])
+                gui.updated.set()
+                if len(markers) != 0 and measurement[0][0] > 2.0:
+                    await robot.drive_straight(cozmo.util.distance_mm(40), cozmo.util.speed_mmps(40)).wait_for_completed()
+                else:
+                    await robot.turn_in_place(cozmo.util.degrees(-30)).wait_for_completed()
+        else:
+            if not goal_reached:
 
     ###################
 
