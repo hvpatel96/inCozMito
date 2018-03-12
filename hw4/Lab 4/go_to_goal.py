@@ -57,7 +57,8 @@ Map_filename = "map_arena.json"
 grid = CozGrid(Map_filename)
 gui = GUIWindow(grid)
 pf = ParticleFilter(grid)
-goal_reached = false
+goal_reached = False
+camera_settings = None
 
 def compute_odometry(curr_pose, cvt_inch=True):
     '''
@@ -122,7 +123,7 @@ async def marker_processing(robot, camera_settings):
 async def run(robot: cozmo.robot.Robot):
 
     global flag_odom_init, last_pose
-    global grid, gui, pf
+    global grid, gui, pf, camera_settings
 
     # start streaming
     robot.camera.image_stream_enabled = True
@@ -139,18 +140,18 @@ async def run(robot: cozmo.robot.Robot):
         [ 0,  0,  1]
     ], dtype=np.float)
     sm = StateMachine();
-    sm.run(self);
+    sm.start(robot);
 
 
 class StateMachine:
-    def run(self):
-        startUp()
-        self.state = Localizing
+
+    def start(self, robot):
+        self.state = Localizing()
         while True:
-            self.state.run().run()
+            await self.state.run(robot)
 
 class State(object):
-    def run(self):
+    def run(self, robot):
         assert 0
     def next(self):
         assert 0
@@ -159,28 +160,27 @@ class State(object):
 
 class Localizing(State):
 
-    await robot.set_head_angle(cozmo.util.degrees(10)).wait_for_completed()
-
-    def run(self):
+    async def run(self, robot):
         if robot.is_picked_up:
             return PickedUp
-        else if converge(pf.particles):
+        elif converge(pf.particles):
             return SeekingGoal
         else:
+            robot = robot
             currPose = robot.pose
             odom = compute_odometry(currPose)
-            markers = marker_processing
+            global camera_settings
+            markers = marker_processing(robot, camera_settings)
             estimate = pf.update(odom, markers)
             gui.show_particles(pf.particles)
-            gui.show_mean(estimate[0], estimate[1], estimate[2]; estimate[3])
+            gui.show_mean(estimate[0], estimate[1], estimate[2], estimate[3])
             gui.updated.set()
             last_pose = curr_pose
             if len(markers) != 0:
-                await robot.drive_straight(cozmo.util.distance_mm(80), cozmo.util
+                robot.drive_straight(cozmo.util.distance_mm(80), cozmo.util
                     .speed_mmps(40)).wait_for_completed()
             else:
-                await robot.turn_in_place(cozmo.util.degrees(-30))
-                .wait_for_completed()
+                robot.turn_in_place(cozmo.util.degrees(-30)).wait_for_completed()
             return Localizing
 
 ## Robot has been picked up
@@ -191,10 +191,10 @@ class PickedUp(State):
     global grid, gui, pf, goal_reached
 
     pf = ParticleFilter(grid)
-    goal_reached = false
+    goal_reached = False
 
-    def run(self):
-        await robot.play_anim_trigger(cozmo.anim.Triggers.KnockOverFailure,
+    def run(self, robot):
+        robot.play_anim_trigger(cozmo.anim.Triggers.KnockOverFailure,
             in_parallel=True).wait_for_completed()
         if not robot.is_picked_up:
             return Localizing
@@ -207,39 +207,38 @@ class PickedUp(State):
 class SeekingGoal(State):
 
     global goal_reached
+    m_x, m_y, m_h, m_c = compute_mean_pose(pf.particles)
 
-        final_rotate = math.degrees(math.atan2(goal[1]*25/25.6 - m_y,
-            goal[0]*25/25.6 - m_x))
+    final_rotate = math.degrees(math.atan2(goal[1]*25/25.6 - m_y,
+        goal[0]*25/25.6 - m_x))
 
-    def run(self):
+    def run(self, robot):
         if robot.is_picked_up:
             return PickedUp
         elif goal_reached:
-            await robot.turn_in_place(cozmo.util.degrees(final_rotate))
-            .wait_for_completed()
-            await robot.play_anim_trigger(cozmo.anim.Triggers.AcknowledgeObject)
-            .wait_for_completed()
+            robot.turn_in_place(cozmo.util.degrees(final_rotate)).wait_for_completed()
+            robot.play_anim_trigger(cozmo.anim.Triggers.AcknowledgeObject).wait_for_completed()
             return Idle
         else:
             m_x, m_y, m_h, m_c = compute_mean_pose(pf.particles)
             face_goal = diff_heading_deg(final_rotate, m_h)
             dist = math.sqrt((goal[0]*25/25.6 - m_x)**2
                 + (goal[1]*25/25.6 - m_y)**2) * 25.6
-            await robot.turn_in_place(cozmo.util.degrees(face_goal)).wait_for_completed()
+            robot.turn_in_place(cozmo.util.degrees(face_goal)).wait_for_completed()
             if dist < 80:
-                await robot.drive_straight(cozmo.util.distance_mm(dist),
+                robot.drive_straight(cozmo.util.distance_mm(dist),
                     cozmo.util.speed_mmps(40)).wait_for_completed()
                 goal_reached = true
             else:
-                await robot.drive_straight(cozmo.util.distance_mm(80),
+                robot.drive_straight(cozmo.util.distance_mm(80),
                     cozmo.util.speed_mmps(40)).wait_for_completed()
             return SeekingGoal
 
 ## Robot has reached the goal
 
 class Idle(State):
-    goal_reached = false
-    def run(self):
+    goal_reached = False
+    def run(self, robot):
         if robot.is_picked_up:
             return Localizing
         else:
@@ -253,7 +252,7 @@ def converge(particles):
     for p in particles:
         d = grid_distance(p.x, p.y, m_x, m_y)
         ang = diff_heading_deg(m_h, p.h)
-        if d < 0.55 && ang < 10:
+        if d < 0.55 and ang < 10:
             count += 1
     return count > 0.96 * PARTICLE_COUNT
 
@@ -277,4 +276,3 @@ if __name__ == '__main__':
     gui.show_particles(pf.particles)
     gui.show_mean(0, 0, 0)
     gui.start()
-
