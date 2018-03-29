@@ -2,13 +2,13 @@ import cozmo
 import math
 import sys
 import time
+import random
 
 from cmap import *
 from gui import *
 from utils import *
 
 MAX_NODES = 20000
-
 
 def step_from_to(node0, node1, limit=75):
     ########################################################################
@@ -19,20 +19,43 @@ def step_from_to(node0, node1, limit=75):
     #    limit units at most
     # 3. Hint: please consider using np.arctan2 function to get vector angle
     # 4. Note: remember always return a Node object
+    if get_dist(node0, node1) > limit:
+        ang_rad = np.arctan2(node1.y - node0.y, node1.x - node0.x)
+        node1 = Node((node0.x + limit * math.cos(ang_rad),
+            node0.y + limit * math.sin(ang_rad)))
     return node1
     ############################################################################
-       
+
 def node_generator(cmap):
     rand_node = None
+    goalNodeRand = random.randint(1, 100)
+    if goalNodeRand >= 96:
+        rand_node = Node(cmap.get_goals()[random.randint(0, len(cmap.get_goals()) - 1)])
+    else:
+        rand_node = Node(tuple(random_coordinates(cmap)))
+        while cmap.is_inside_obstacles(rand_node) and not cmap.is_inbound(rand_node):
+            rand_node = Node(tuple(random_coordinates(cmap)))
+
     ############################################################################
     # TODO: please enter your code below.
     # 1. Use CozMap width and height to get a uniformly distributed random node
     # 2. Use CozMap.is_inbound and CozMap.is_inside_obstacles to determine the
     #    legitimacy of the random node.
     # 3. Note: remember always return a Node object
+
     pass
     ############################################################################
     return rand_node
+
+def random_coordinates(cmap):
+    width_mm = cmap.get_size()[0]
+    height_mm = cmap.get_size()[1]
+    ## Added 100 mm to each size because I am assuming
+    ## Incozmito has a 100mm radius max
+    width_coord = random.random() * width_mm
+    height_coord = random.random() * height_mm
+    return width_coord, height_coord
+
 
 def RRT(cmap, start):
     cmap.add_node(start)
@@ -46,12 +69,18 @@ def RRT(cmap, start):
         # 3. Limit the distance RRT can move
         # 4. Add one path from nearest node to random node
         #
-        rand_node = None
-        nearest_node = None
-        pass
+        rand_node = cmap.get_random_valid_node()
+        all_nodes = cmap.get_nodes()
+        nearest_node = all_nodes[0]
+        for node in all_nodes:
+            if get_dist(rand_node, node) < get_dist(rand_node, nearest_node):
+                nearest_node = node
+        rand_node = step_from_to(nearest_node, rand_node)
+
         ########################################################################
         time.sleep(0.01)
-        cmap.add_path(nearest_node, rand_node)
+        if not cmap.is_collision_with_obstacles((rand_node, nearest_node)):
+            cmap.add_path(nearest_node, rand_node)
         if cmap.is_solved():
             break
 
@@ -78,7 +107,7 @@ async def CozmoPlanning(robot: cozmo.robot.Robot):
 async def detect_cube_and_update_cmap(robot, marked, cozmo_pos):
     #updates the map with observed cubes and sets the goal if it is found
     #marked can be initialized to {}
-    
+
     global cmap
     cube_padding = 60.
     cozmo_padding = 100.
@@ -112,13 +141,13 @@ async def detect_cube_and_update_cmap(robot, marked, cozmo_pos):
             goal_center = object_pos
 
         obstacle_nodes = []
-        obstacle_nodes.append(get_global_node(angle, object_pos, 
+        obstacle_nodes.append(get_global_node(angle, object_pos,
                                               Node((cube_padding, cube_padding))))
-        obstacle_nodes.append(get_global_node(angle, object_pos, 
+        obstacle_nodes.append(get_global_node(angle, object_pos,
                                               Node((cube_padding, -cube_padding))))
-        obstacle_nodes.append(get_global_node(angle, object_pos, 
+        obstacle_nodes.append(get_global_node(angle, object_pos,
                                               Node((-cube_padding, -cube_padding))))
-        obstacle_nodes.append(get_global_node(angle, object_pos, 
+        obstacle_nodes.append(get_global_node(angle, object_pos,
                                               Node((-cube_padding, cube_padding))))
         cmap.add_obstacle(obstacle_nodes)
 
@@ -166,7 +195,7 @@ if __name__ == '__main__':
         robot_thread = RobotThread()
         robot_thread.start()
     else:
-        cmap = CozMap("maps/map2.json", node_generator)    
+        cmap = CozMap("maps/map2.json", node_generator)
         sim = RRTThread()
         sim.start()
     visualizer = Visualizer(cmap)
