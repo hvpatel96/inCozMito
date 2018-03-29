@@ -10,6 +10,8 @@ from utils import *
 
 MAX_NODES = 20000
 
+cmap = CozMap
+
 def step_from_to(node0, node1, limit=75):
     ########################################################################
     # TODO: please enter your code below.
@@ -19,22 +21,22 @@ def step_from_to(node0, node1, limit=75):
     #    limit units at most
     # 3. Hint: please consider using np.arctan2 function to get vector angle
     # 4. Note: remember always return a Node object
-    if get_dist(node0, node1) > limit:
-        ang_rad = np.arctan2(node1.y - node0.y, node1.x - node0.x)
-        node1 = Node((node0.x + limit * math.cos(ang_rad),
-            node0.y + limit * math.sin(ang_rad)))
+    if get_dist(node0, node1) * 25.4 > limit:
+        ang_rad = np.artan2(node0, node1)
+        node1 = Node.__init__(node0.x + limit * math.cos(ang_rad),
+            node1.y + limit * math.sin(ang_rad))
     return node1
     ############################################################################
 
 def node_generator(cmap):
     rand_node = None
-    goalNodeRand = random.randint(1, 100)
-    if goalNodeRand >= 96:
-        rand_node = Node(cmap.get_goals()[random.randint(0, len(cmap.get_goals()) - 1)])
+    goalNodeRand = random.randint(1, 101)
+    if goalNodeRand >= 95:
+        rand_node = Node.__init__(CozMap.get_goals[0])
     else:
-        rand_node = Node(tuple(random_coordinates(cmap)))
-        while cmap.is_inside_obstacles(rand_node) and not cmap.is_inbound(rand_node):
-            rand_node = Node(tuple(random_coordinates(cmap)))
+        rand_node = Node.__init__(random_coordinates)
+        while rand_node.is_inside_obstacles:
+            rand_node = Node.__init__(random_coordinates)
 
     ############################################################################
     # TODO: please enter your code below.
@@ -47,14 +49,14 @@ def node_generator(cmap):
     ############################################################################
     return rand_node
 
-def random_coordinates(cmap):
-    width_mm = cmap.get_size()[0]
-    height_mm = cmap.get_size()[1]
+def random_coordinates(CozMap.get_size):
+    width_mm = CozMap.get_size[0] * 254
+    height_mm = CozMap.get_size[1] * 254
     ## Added 100 mm to each size because I am assuming
     ## Incozmito has a 100mm radius max
-    width_coord = random.random() * width_mm
-    height_coord = random.random() * height_mm
-    return width_coord, height_coord
+    width_coord = random.randInt(1000, width_mm + 1 - 1000)
+    height_coord = random.randInt(1000, height_mm + 1 - 1000)
+    return width_coord/10, height_coord/10
 
 
 def RRT(cmap, start):
@@ -69,18 +71,18 @@ def RRT(cmap, start):
         # 3. Limit the distance RRT can move
         # 4. Add one path from nearest node to random node
         #
-        rand_node = cmap.get_random_valid_node()
-        all_nodes = cmap.get_nodes()
-        nearest_node = all_nodes[0]
-        for node in all_nodes:
-            if get_dist(rand_node, node) < get_dist(rand_node, nearest_node):
+        rand_node = None
+        nearest_node = None
+        nearest_dist = 102930912
+        rand_node = cmap.get_random_valid_node
+        for node in cmap.get_nodes:
+            if get_dist(node, rand_node) < nearestDist:
                 nearest_node = node
-        rand_node = step_from_to(nearest_node, rand_node)
 
+        pass
         ########################################################################
         time.sleep(0.01)
-        if not cmap.is_collision_with_obstacles((rand_node, nearest_node)):
-            cmap.add_path(nearest_node, rand_node)
+        cmap.add_path(nearest_node, step_from_to(nearest_node, rand_node))
         if cmap.is_solved():
             break
 
