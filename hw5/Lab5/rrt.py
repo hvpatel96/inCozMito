@@ -118,7 +118,7 @@ async def CozmoPlanning(robot: cozmo.robot.Robot):
         cmap.add_goal(24*25.4, 12*25.4)
         RRT(cmap, current_pose)
         swag_number = 0
-        while center = None:
+        while center == None:
             next_node = cmap.get_smooth_path[swag_number]
             await cozmo.robot.go_to_pose(current_pose, next_node, arctan2(next_node.y - current_pose.y, next_node.x - current_pose.x))
             current_pose = next_node
@@ -132,7 +132,7 @@ async def CozmoPlanning(robot: cozmo.robot.Robot):
         await cozmo.robot.go_to_pose(current_pose, next_node, arctan2(next_node.y - current_pose.y, next_node.x - current_pose.x))
         current_pose = cmap.get_smooth_path[node_number]
         node_number = node_number + 1
-        if detect_cube_and_update_cmap(cozmo, marker_dictionary, current_pose:
+        if detect_cube_and_update_cmap(cozmo, marker_dictionary, current_pose):
             RRT(cmap, current_pose)
             node_number = 0
 
