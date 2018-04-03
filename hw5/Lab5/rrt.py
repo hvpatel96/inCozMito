@@ -3,6 +3,7 @@ import math
 import sys
 import time
 import random
+import numpy as np
 
 from cmap import *
 from gui import *
@@ -100,10 +101,20 @@ async def CozmoPlanning(robot: cozmo.robot.Robot):
     # Allows access to map and stopevent, which can be used to see if the GUI
     # has been closed by checking stopevent.is_set()
     global cmap, stopevent
-
+    cmap.set_start(Node((6*25.4, 10*25.4)))
+    markers = dict()
+    update, center = await detect_cube_and_update_cmap(robot, markers, cmap.get_start())
     ########################################################################
     # TODO: please enter your code below.
     # Description of function provided in instructions
+
+def get_global_node(angle, position, node):
+    transformation_matrix = [[math.cos(angle), -math.sin(angle), position.x],
+                            [math.sin(angle), math.cos(angle), position.y],
+                            [0, 0, 1]]
+    local_pos = [node.x, node.y, 1]
+    product = np.matmul(transformation_matrix, local_pos)
+    return Node(product[0], product[1])
 
 async def detect_cube_and_update_cmap(robot, marked, cozmo_pos):
     #updates the map with observed cubes and sets the goal if it is found
