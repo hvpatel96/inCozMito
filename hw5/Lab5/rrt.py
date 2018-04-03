@@ -100,13 +100,47 @@ def RRT(cmap, start):
 async def CozmoPlanning(robot: cozmo.robot.Robot):
     # Allows access to map and stopevent, which can be used to see if the GUI
     # has been closed by checking stopevent.is_set()
-    global cmap, stopevent
+    global cmap, stopevent, marker_dictionary, current_pose
     cmap.set_start(Node((6*25.4, 10*25.4)))
     markers = dict()
     update, center = await detect_cube_and_update_cmap(robot, markers, cmap.get_start())
     ########################################################################
     # TODO: please enter your code below.
     # Description of function provided in instructions
+    current_pose = cmap.get_start
+    marker_dictionary = {}
+
+    # All needed states are here:
+
+    # Seeking Goal
+    swag_number = 0
+    if len(cmap.get_goals) == 0:
+        cmap.add_goal(24*25.4, 12*25.4)
+        RRT(cmap, current_pose)
+        swag_number = 0
+        while center == None:
+            next_node = cmap.get_smooth_path[swag_number]
+            await cozmo.robot.go_to_pose(cozmo.util.Pose(next_node.x - current_pose.x, next_node.y - current_pose.y, 0, angle_z=cozmo.util.Angle(degrees=arctan2(next_node.y - current_pose.y, next_node.x - current_pose.x))), relative_to_robot=true)
+            current_pose = next_node
+            swag_number = swag_number + 1
+            update, center = detect_cube_and_update_cmap(cozmo, marker_dictionary, current_pose)
+            if update:
+                RRT(cmap, current_pose)
+                swag_number = 0
+
+    # Heading to Goal
+    node_number = 0
+    while current_pose != center:
+        next_node = cmap.get_smooth_path[node_number]
+        await cozmo.robot.go_to_pose(cozmo.util.Pose(next_node.x - current_pose.x, next_node.y - current_pose.y, 0, angle_z=cozmo.util.Angle(degrees=arctan2(next_node.y - current_pose.y, next_node.x - current_pose.x))), relative_to_robot=true)
+        current_pose = cmap.get_smooth_path[node_number]
+        node_number = node_number + 1
+        update, center = detect_cube_and_update_cmap(cozmo, marker_dictionary, current_pose)
+        if update:
+            RRT(cmap, current_pose)
+            node_number = 0
+
+
 
 def get_global_node(angle, position, node):
     transformation_matrix = [[math.cos(angle), -math.sin(angle), position.x],
