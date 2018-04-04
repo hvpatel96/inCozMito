@@ -97,48 +97,125 @@ def RRT(cmap, start):
     else:
         print("Please try again :-(")
 
+def diff_heading_deg(heading1, heading2):
+    dh = heading1 - heading2
+    while dh > 180:
+        dh -= 360
+    while dh <= -180:
+        dh += 360
+    return dh
+
 async def CozmoPlanning(robot: cozmo.robot.Robot):
     # Allows access to map and stopevent, which can be used to see if the GUI
     # has been closed by checking stopevent.is_set()
-    global cmap, stopevent, marker_dictionary, current_pose
-    cmap.set_start(Node((6*25.4, 10*25.4)))
+    # global cmap, stopevent, marker_dictionary, current_pose
+    # cmap.set_start(Node((6*25.4, 10*25.4)))
+    # markers = dict()
+    # update, center = await detect_cube_and_update_cmap(robot, markers, cmap.get_start())
+    # #######################################################################
+    # # TODO: please enter your code below.
+    # # Description of function provided in instructions
+    # current_pose = cmap.get_start()
+    # marker_dictionary = {}
+
+    # # All needed states are here:
+
+    # # Seeking Goal
+    # swag_number = 0
+    # RRT(cmap, current_pose)
+    global cmap, stopevent
+
     markers = dict()
+    count = 0
+    currentAngle = 0
+    await robot.set_head_angle(cozmo.util.degrees(0)).wait_for_completed()
     update, center = await detect_cube_and_update_cmap(robot, markers, cmap.get_start())
-    ########################################################################
-    # TODO: please enter your code below.
-    # Description of function provided in instructions
-    current_pose = cmap.get_start
-    marker_dictionary = {}
+    if center is None:
+        cmap.add_goal(Node((325,225)))
+        RRT(cmap, cmap.get_start())
+        cmap.set_start(Node((325,225)))
+        path = cmap.get_smooth_path()
+        while count != (len(path) - 1):
+            currNode = path[count]
+            nextNode = path[count + 1]
+            diff_x = nextNode.x - currNode.x
+            diff_y = nextNode.y - currNode.y
 
-    # All needed states are here:
+            diff_h = math.degrees(math.atan2(diff_y, diff_x))
+            final_distance = math.sqrt((diff_y ** 2) + (diff_x ** 2))
+            turn_angle = diff_heading_deg(diff_h, currentAngle)
 
-    # Seeking Goal
+            await robot.turn_in_place(cozmo.util.degrees(turn_angle)).wait_for_completed()
+            await robot.drive_straight(cozmo.util.distance_mm(final_distance), cozmo.util.speed_mmps(100)).wait_for_completed()
+
+            currentAngle = turn_angle
+            count = count + 1
+            update, center = await detect_cube_and_update_cmap(robot, markers, cmap.get_start())
+        while center is None:
+            await robot.turn_in_place(cozmo.util.degrees(15)).wait_for_completed()
+            update, center = await detect_cube_and_update_cmap(robot, markers, cmap.get_start())
+    cmap.reset()
+    RRT(cmap, cmap.get_start())
+    path = cmap.get_smooth_path()
     swag_number = 0
-    if len(cmap.get_goals) == 0:
-        cmap.add_goal(24*25.4, 12*25.4)
-        RRT(cmap, current_pose)
-        swag_number = 0
-        while center == None:
-            next_node = cmap.get_smooth_path[swag_number]
-            await cozmo.robot.go_to_pose(cozmo.util.Pose(next_node.x - current_pose.x, next_node.y - current_pose.y, 0, angle_z=cozmo.util.Angle(degrees=arctan2(next_node.y - current_pose.y, next_node.x - current_pose.x))), relative_to_robot=true)
-            current_pose = next_node
-            swag_number = swag_number + 1
-            update, center = detect_cube_and_update_cmap(cozmo, marker_dictionary, current_pose)
-            if update:
-                RRT(cmap, current_pose)
-                swag_number = 0
+    count = 0
+    currentAngle = 0
+    while count != (len(path) - 1):
+        currNode = path[count]
+        nextNode = path[count + 1]
+        diff_x = nextNode.x - currNode.x
+        diff_y = nextNode.y - currNode.y
 
-    # Heading to Goal
-    node_number = 0
-    while current_pose != center:
-        next_node = cmap.get_smooth_path[node_number]
-        await cozmo.robot.go_to_pose(cozmo.util.Pose(next_node.x - current_pose.x, next_node.y - current_pose.y, 0, angle_z=cozmo.util.Angle(degrees=arctan2(next_node.y - current_pose.y, next_node.x - current_pose.x))), relative_to_robot=true)
-        current_pose = cmap.get_smooth_path[node_number]
-        node_number = node_number + 1
-        update, center = detect_cube_and_update_cmap(cozmo, marker_dictionary, current_pose)
-        if update:
-            RRT(cmap, current_pose)
-            node_number = 0
+        diff_h = math.degrees(math.atan2(diff_y, diff_x))
+        final_distance = math.sqrt((diff_y ** 2) + (diff_x ** 2))
+        turn_angle = diff_heading_deg(diff_h, currentAngle)
+
+        await robot.turn_in_place(cozmo.util.degrees(turn_angle)).wait_for_completed()
+        await robot.drive_straight(cozmo.util.distance_mm(final_distance), cozmo.util.speed_mmps(100)).wait_for_completed()
+
+        currentAngle = turn_angle
+        count = count + 1
+    # await robot.turn_in_place(cozmo.util.degrees(turn_angle)).wait_for_completed()
+    # while swag_number < len(path) - 1:
+    #     current_node = path[swag_number]
+    #     next_node = path[swag_number + 1]
+    #     await robot.go_to_pose(cozmo.util.Pose(next_node.x - current_node.x, next_node.y - current_node.y, 0, angle_z=cozmo.util.Angle(degrees=np.arctan2(next_node.y - current_node.y, next_node.x - current_node.x))), relative_to_robot=True).wait_for_completed()
+    #     swag_number = swag_number + 1
+
+    diff_x = center.x - path[-1].x
+    diff_y = center.y - path[-1].y
+
+    diff_h = math.degrees(math.atan2(diff_y, diff_x))
+    final_distance = math.sqrt((diff_y ** 2) + (diff_x ** 2))
+    turn_angle = diff_heading_deg(diff_h, currentAngle)
+    await robot.turn_in_place(cozmo.util.degrees(turn_angle)).wait_for_completed()
+
+    # if len(cmap.get_goals()) == 0:
+    #     cmap.add_goal(Node((24*25.4, 12*25.4)))
+    #     RRT(cmap, current_pose)
+        # swag_number = 0
+    #     path = cmap.get_smooth_path()
+    #     while center == None:
+    #         next_node = path[swag_number]
+    # await robot.go_to_pose(cozmo.util.Pose(300 - current_pose.x, 300 - current_pose.y, 0, angle_z=cozmo.util.Angle(degrees=np.arctan2(300 - current_pose.y, 300 - current_pose.x))), relative_to_robot=True).wait_for_completed()
+    #         current_pose = next_node
+    #         swag_number = swag_number + 1
+    #         update, center = detect_cube_and_update_cmap(cozmo, marker_dictionary, current_pose)
+    #         if update:
+    #             RRT(cmap, current_pose)
+    #             swag_number = 0
+
+    # # Heading to Goal
+    # node_number = 0
+    # while current_pose != center:
+    #     next_node = cmap.get_smooth_path()[node_number]
+    #     await cozmo.robot.go_to_pose(cozmo.util.Pose(next_node.x - current_pose.x, next_node.y - current_pose.y, 0, angle_z=cozmo.util.Angle(degrees=arctan2(next_node.y - current_pose.y, next_node.x - current_pose.x))), relative_to_robot=true)
+    #     current_pose = cmap.get_smooth_path[node_number]
+    #     node_number = node_number + 1
+    #     update, center = detect_cube_and_update_cmap(cozmo, marker_dictionary, current_pose)
+    #     if update:
+    #         RRT(cmap, current_pose)
+    #         node_number = 0
 
 
 
@@ -148,58 +225,80 @@ def get_global_node(angle, position, node):
                             [0, 0, 1]]
     local_pos = [node.x, node.y, 1]
     product = np.matmul(transformation_matrix, local_pos)
-    return Node(product[0], product[1])
+    return Node((product[0], product[1]))
 
 async def detect_cube_and_update_cmap(robot, marked, cozmo_pos):
-    #updates the map with observed cubes and sets the goal if it is found
-    #marked can be initialized to {}
+    """Helper function used to detect obstacle cubes and the goal cube.
+       1. When a valid goal cube is detected, old goals in cmap will be cleared and a new goal corresponding to the approach position of the cube will be added.
+       2. Approach position is used because we don't want the robot to drive to the center position of the goal cube.
+       3. The center position of the goal cube will be returned as goal_center.
 
+        Arguments:
+        robot -- provides the robot's pose in G_Robot
+                 robot.pose is the robot's pose in the global coordinate frame that the robot initialized (G_Robot)
+                 also provides light cubes
+        cozmo_pose -- provides the robot's pose in G_Arena
+                 cozmo_pose is the robot's pose in the global coordinate we created (G_Arena)
+        marked -- a dictionary of detected and tracked cubes (goal cube not valid will not be added to this list)
+
+        Outputs:
+        update_cmap -- when a new obstacle or a new valid goal is detected, update_cmap will set to True
+        goal_center -- when a new valid goal is added, the center of the goal cube will be returned
+    """
     global cmap
+
+    # Padding of objects and the robot for C-Space
     cube_padding = 60.
     cozmo_padding = 100.
-    goal_cube_found = False
+
+    # Flags
     update_cmap = False
     goal_center = None
+
+    # Time for the robot to detect visible cubes
+    time.sleep(1)
+
     for obj in robot.world.visible_objects:
+
         if obj.object_id in marked:
             continue
 
-        print(obj)
-        update_cmap = True
-        is_goal_cube = robot.world.light_cubes[cozmo.objects.LightCube1Id].object_id == obj.object_id
-
-        robot_pose = robot.pose
-        object_pose = obj.pose
-
-        dx = object_pose.position.x - robot_pose.position.x
-        dy = object_pose.position.y - robot_pose.position.y
+        # Calculate the object pose in G_Arena
+        # obj.pose is the object's pose in G_Robot
+        # We need the object's pose in G_Arena (object_pos, object_angle)
+        dx = obj.pose.position.x - robot.pose.position.x
+        dy = obj.pose.position.y - robot.pose.position.y
 
         object_pos = Node((cozmo_pos.x+dx, cozmo_pos.y+dy))
+        object_angle = obj.pose.rotation.angle_z.radians
 
-        angle = object_pose.rotation.angle_z.radians
+        # The goal cube is defined as robot.world.light_cubes[cozmo.objects.LightCube1Id].object_id
+        if robot.world.light_cubes[cozmo.objects.LightCube1Id].object_id == obj.object_id:
 
-        if is_goal_cube:
+            # Calculate the approach position of the object
             local_goal_pos = Node((0, -cozmo_padding))
-            goal_pos = get_global_node(angle, object_pos, local_goal_pos)
-            cmap.clear_goals()
-            cmap.add_goal(goal_pos)
-            goal_cube_found = True
-            goal_center = object_pos
+            goal_pos = get_global_node(object_angle, object_pos, local_goal_pos)
 
+            # Check whether this goal location is valid
+            if cmap.is_inside_obstacles(goal_pos) or (not cmap.is_inbound(goal_pos)):
+                print("The goal position is not valid. Please remove the goal cube and place in another position.")
+            else:
+                cmap.clear_goals()
+                cmap.add_goal(goal_pos)
+                goal_center = object_pos
+
+        # Define an obstacle by its four corners in clockwise order
         obstacle_nodes = []
-        obstacle_nodes.append(get_global_node(angle, object_pos,
-                                              Node((cube_padding, cube_padding))))
-        obstacle_nodes.append(get_global_node(angle, object_pos,
-                                              Node((cube_padding, -cube_padding))))
-        obstacle_nodes.append(get_global_node(angle, object_pos,
-                                              Node((-cube_padding, -cube_padding))))
-        obstacle_nodes.append(get_global_node(angle, object_pos,
-                                              Node((-cube_padding, cube_padding))))
+        obstacle_nodes.append(get_global_node(object_angle, object_pos, Node((cube_padding, cube_padding))))
+        obstacle_nodes.append(get_global_node(object_angle, object_pos, Node((cube_padding, -cube_padding))))
+        obstacle_nodes.append(get_global_node(object_angle, object_pos, Node((-cube_padding, -cube_padding))))
+        obstacle_nodes.append(get_global_node(object_angle, object_pos, Node((-cube_padding, cube_padding))))
         cmap.add_obstacle(obstacle_nodes)
-
         marked[obj.object_id] = obj
+        update_cmap = True
 
     return update_cmap, goal_center
+
 
 class RobotThread(threading.Thread):
     """Thread to run cozmo code separate from main thread
