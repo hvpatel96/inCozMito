@@ -32,7 +32,7 @@ from cozmo.util import degrees, Pose
 
 def cozmo_program(robot: cozmo.robot.Robot):
     fixed_object = robot.world.create_custom_fixed_object(Pose(100, 0, 0, angle_z=degrees(0)),
-                                                        10, 100, 100, relative_to_robot=True)
+                                                        100, 100, 100, relative_to_robot=True)
     if fixed_object:
         print("fixed_object created successfully")
 

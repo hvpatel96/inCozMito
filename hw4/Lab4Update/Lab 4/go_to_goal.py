@@ -18,6 +18,7 @@ import time
 import sys
 import asyncio
 from PIL import Image
+import math
 
 from markers import detect, annotator
 
@@ -53,7 +54,7 @@ last_pose = cozmo.util.Pose(0,0,0,angle_z=cozmo.util.Angle(degrees=0))
 flag_odom_init = False
 
 # goal location for the robot to drive to, (x, y, theta)
-goal = (6, 10, 0)
+goal = (6, 12, 0)
 
 # map
 Map_filename = "map_arena.json"
@@ -192,7 +193,7 @@ async def run(robot: cozmo.robot.Robot):
             if not robot_ReachedGoal:
                 # Calculate distance to Goal and angle to Goal
                 mean_x, mean_y, mean_h, mean_c = compute_mean_pose(pf.particles)
-                goal_x, goal_y, goal_h = (goal[0] * grid.scale / 25.4, goal[1] * grid.scale / 25.4, goal[2])
+                goal_x, goal_y, goal_h = (goal[0], goal[1], goal[2])
 
                 diff_x = goal_x - mean_x
                 diff_y = goal_y - mean_y
@@ -201,29 +202,56 @@ async def run(robot: cozmo.robot.Robot):
                 final_distance = math.sqrt((diff_y ** 2) + (diff_x ** 2)) * 25.4
                 turn_angle = diff_heading_deg(diff_h, mean_h)
 
-                # Turn toward Goal
-                if not robot.is_picked_up:
-                    await robot.turn_in_place(cozmo.util.degrees(turn_angle)).wait_for_completed()
-                else:
-                    print("Kidnapped!")
-                    await robot.play_anim_trigger(cozmo.anim.Triggers.KnockOverFailure, in_parallel=True).wait_for_completed()
-                    pf = ParticleFilter(grid)
-                    time.sleep(1)
-                    continue
+                transformation_matrix = [[math.cos(mean_h), -math.sin(mean_h), mean_x],
+                        [math.sin(mean_h), math.cos(mean_h), mean_y],
+                        [0, 0, 1]]
+                transformation_matrix = np.linalg.inv(transformation_matrix)
+                local_pos = [goal_x, goal_y, 1]
+                product = np.matmul(transformation_matrix, local_pos)
+                localX, localY = product[0], product[1]
+                print("Mean_x: " + str(mean_x) + " Mean_y: " + str(mean_y) + " Mean_h: " + str(mean_h))
+                print("LocalX: " + str(localX) + " LocalY: " + str(localY))
+                await robot.go_to_pose(cozmo.util.Pose(product[0] * 25.4, -product[1] * 25.4, 0, angle_z=cozmo.util.degrees(0)), relative_to_robot=True).wait_for_completed()
 
-                distance_driven = 0
+                # Turn toward Goal
+                # if not robot.is_picked_up:
+                #     await robot.turn_in_place(cozmo.util.degrees(turn_angle)).wait_for_completed()
+                # else:
+                #     print("Kidnapped!")
+                #     await robot.play_anim_trigger(cozmo.anim.Triggers.KnockOverFailure, in_parallel=True).wait_for_completed()
+                #     pf = ParticleFilter(grid)
+                #     time.sleep(1)
+                #     continue
+
+                # distance_driven = 0
                 driving_Kidnapped = False
-                # Drive to Goal
-                while distance_driven < final_distance:
-                    if robot.is_picked_up:
-                        print("Kidnapped!")
-                        await robot.play_anim_trigger(cozmo.anim.Triggers.BlockReact, in_parallel=True).wait_for_completed()
-                        pf = ParticleFilter(grid)
-                        time.sleep(1)
-                        driving_Kidnapped = True
-                        break
-                    await robot.drive_straight(cozmo.util.distance_mm(min(40, final_distance - distance_driven)), cozmo.util.speed_mmps(40)).wait_for_completed()
-                    distance_driven += 40
+                # # Drive to Goal
+                # while distance_driven < final_distance:
+                #     if robot.is_picked_up:
+                #         print("Kidnapped!")
+                #         await robot.play_anim_trigger(cozmo.anim.Triggers.BlockReact, in_parallel=True).wait_for_completed()
+                #         pf = ParticleFilter(grid)
+                #         time.sleep(1)
+                #         driving_Kidnapped = True
+                #         break
+                #     currentPose = robot.pose
+                #     curr_X = currentPose.position.x
+                #     curr_Y = currentPose.position.y
+                #     curr_H = currentPose.rotation.angle_z.radians
+
+                #     transformation_matrix = [[math.cos(mean_h), -math.sin(mean_h), mean_x],
+                #             [math.sin(mean_h), math.cos(mean_h), mean_y],
+                #             [0, 0, 1]]
+                #     local_pos = [curr_X, curr_Y, 1]
+                #     product = np.matmul(transformation_matrix, local_pos)
+                #     globalX, globalY = product[0], product[1]
+                #     print("Goal x: " + str(goal_x) + " Robot x: " + str(globalX))
+                #     print("Goal y: " + str(goal_y) + " Robot y: " + str(globalY))
+                #     from cozmo.util import degrees, Pose
+                #     await robot.go_to_pose(Pose(goal_x * 25.4 - globalX, goal_y * 25.4 - globalY, 0, angle_z=degrees(0)), relative_to_robot=True).wait_for_completed()
+                #     # await robot.drive_straight(cozmo.util.distance_mm(min(40, final_distance - distance_driven)), cozmo.util.speed_mmps(40)).wait_for_completed()
+
+                #     distance_driven += final_distance
 
                 if driving_Kidnapped:
                     continue
@@ -235,7 +263,7 @@ async def run(robot: cozmo.robot.Robot):
                     time.sleep(1)
                     continue
                 else:
-                    await robot.turn_in_place(cozmo.util.degrees(goal_h - diff_h)).wait_for_completed()
+                    # await robot.turn_in_place(cozmo.util.degrees(goal_h - diff_h)).wait_for_completed()
                     robot_ReachedGoal = True
             else:
                 # Reached Goal - Chill Here
